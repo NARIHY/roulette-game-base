@@ -1,16 +1,25 @@
 class CasinoInterface {
     constructor() {
-        //Loader
+        // Loader
         this.loadingElement = document.getElementById('loading');
 
-        //user 
+        // User
         this.user = [];
-
-
         this.balance = 0;
         this.bet = null;
 
-        //Logout btn
+        // Buttons and Elements
+        this.initElements();
+
+        // Event Listeners
+        this.addEventListeners();
+
+        this.checkUserSession();
+        this.loadBalance();
+        this.drawWheel();
+    }
+
+    initElements() {
         this.logoutBtn = document.getElementById('logoutBtnAction');
 
         // Roulette Elements
@@ -57,8 +66,9 @@ class CasinoInterface {
         this.closeDepositPopup = document.getElementById('closeDepositPopup');
         this.withdrawSubmit = document.getElementById('withdrawSubmit');
         this.closeWithdrawPopup = document.getElementById('closeWithdrawPopup');
+    }
 
-        // Event Listeners
+    addEventListeners() {
         this.spinButton.addEventListener('click', () => this.spin());
         this.betButton.addEventListener('click', () => this.placeBet());
 
@@ -80,10 +90,6 @@ class CasinoInterface {
         this.closeWithdrawPopup.addEventListener('click', () => this.hidePopup(this.withdrawPopup));
 
         this.logoutBtn.addEventListener('click', () => this.logout());
-
-        this.checkUserSession();
-        this.loadBalance();
-        this.drawWheel();
     }
 
     showPopup(popup) {
@@ -127,9 +133,6 @@ class CasinoInterface {
     }
 
     async spin() {
-        //Petit chargement
-        // this.showLoading();
-        // this.hideLoading();
         const duration = Math.random() * 11000 + 4000; // Durée entre 4s et 15s
         const startTime = Date.now();
         const startAngle = 0;
@@ -207,7 +210,6 @@ class CasinoInterface {
     }
 
     async loadBalance() {
-
         if (!this.user) {
             console.error('Utilisateur non connecté');
             this.hideLoading();
@@ -219,264 +221,193 @@ class CasinoInterface {
                 let url = `user.php?action=getBalance&username=${this.user.nom}`;
                 let response = await fetch(url);
                 if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
+                    throw new Error('Erreur lors du chargement du solde');
                 }
+
                 let data = await response.json();
-                if (data.success) {
-                    this.balance = data.balance;
-                    this.updateBalance();
-                } else {
-                    console.error('Erreur lors du chargement du solde');
-                }
+                this.balance = data.balance || 0;
+                this.updateBalance();
+                this.hideLoading();
             } else {
-                // Si c'est undifiend
-                // console.log("Empty");
+                console.error('Utilisateur non défini');
+                this.hideLoading();
             }
         } catch (error) {
             console.error('Erreur lors du chargement du solde', error);
-        } finally {
             this.hideLoading();
         }
     }
 
+    updateBalance() {
+        this.moneyElement.innerHTML = `${this.balance} AR`;
+    }
 
-    //chek user connected
     async checkUserSession() {
-        const token = CasinoInterface.getCookie('tokens');
-        if (token) {
-            let response = await fetch('user.php?action=checkSession', {
+        try {
+            let response = await fetch('user.php?action=checkSession');
+            if (response.ok) {
+                let data = await response.json();
+                if (data.loggedIn) {
+                    this.user = data.user;
+                    this.balance = data.balance || 0;
+                    this.updateBalance();
+                } else {
+                    this.user = [];
+                }
+            } else {
+                throw new Error('Erreur lors de la vérification de la session utilisateur');
+            }
+        } catch (error) {
+            console.error('Erreur lors de la vérification de la session utilisateur', error);
+        }
+    }
+
+    async createAccount() {
+        const nom = this.registerNom.value.trim();
+        const prenom = this.registerPrenom.value.trim();
+        const cin = this.registerCIN.value.trim();
+        const telephone = this.registerTelephone.value.trim();
+        const email = this.registerEmail.value.trim();
+        const motDePasse = this.registerMotDePasse.value.trim();
+        const codeSecret = this.registerCodeSecret.value.trim();
+
+        if (!nom || !prenom || !cin || !telephone || !email || !motDePasse || !codeSecret) {
+            alert('Veuillez remplir tous les champs.');
+            return;
+        }
+
+        try {
+            let response = await fetch('user.php?action=register', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    token: token,
-                })
+                body: JSON.stringify({ nom, prenom, cin, telephone, email, motDePasse, codeSecret })
             });
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
+
             let data = await response.json();
-            if (data == null) {
-                console.log('Veuillez vous reconnecter');
-            } else if (data.status == 'connecter') {
-                console.log('valider');
-                this.balance = data.balance;
-                this.updateBalance();
-
-                //boutton de connexion false
-                this.loginButton.style.display = "none";
-                //Boutton d'inscription à false
-                this.createAccountButton.style.display = "none";
-                //logout true
-                this.logoutBtn.style.display = "block";
+            if (data.status === 'success') {
+                alert('Compte créé avec succès. Vous pouvez maintenant vous connecter.');
+                this.hidePopup(this.createAccountPopup);
             } else {
-                console.error('Erreur');
+                alert('Erreur lors de la création du compte. Veuillez réessayer.');
             }
-        } else {
-            console.log("Aucune token n'est trouver.")
+        } catch (error) {
+            console.error('Erreur lors de la création du compte', error);
         }
     }
 
-    /**
-     * Il ne reste plus qu'a formater les formulaires et ajouter un petit loader pour chaque action
-     * @async méthode asynchrone pour la création d'un compte
-     * 
-     */
-    async createAccount() {
-        const nom = this.registerNom.value;
-        const prenom = this.registerPrenom.value;
-        const cin = this.registerCIN.value;
-        const telephone = this.registerTelephone.value;
-        const email = this.registerEmail.value;
-        const motDePasse = this.registerMotDePasse.value;
-        const codeSecret = this.registerCodeSecret.value;
-
-        if (nom && prenom && cin && telephone && email && motDePasse && codeSecret) {
-            try {
-                let response = await fetch('user.php?action=register', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        nom: nom,
-                        prenom: prenom, // Nom de la variable correctement orthographié
-                        cin: cin,
-                        telephone: telephone,
-                        email: email,
-                        mot_de_passe: motDePasse, // Nom de la variable correctement orthographié
-                        code_secret: codeSecret,
-                        amount: 1000 // Par exemple, si vous voulez déposer un montant initial
-                    })
-                });
-
-                let data = await response.json();
-                if (data.status === 'success') {
-                    this.hidePopup(this.createAccountPopup);
-                    alert('Compte créé avec succès !');
-                    //Enlever les valeurs dans les champs
-                    this.registerNom.value = '';
-                    this.registerPrenom.value = '';
-                    this.registerCIN.value = '';
-                    this.registerTelephone.value = '';
-                    email.value = '';
-                    this.registerMotDePasse.value = '';
-                    this.registerCodeSecret.value = '';
-                } else {
-                    alert('Erreur lors de la création du compte');
-                }
-            } catch (error) {
-                console.error('Erreur lors de la création du compte', error);
-            }
-        } else {
-            alert('Veuillez remplir tous les champs');
-        }
-    }
-
-
-
-    //Allow to login in our application
     async login() {
-        const email = this.loginEmail.value;
-        const motDePasse = this.loginMotDePasse.value;
+        const email = this.loginEmail.value.trim();
+        const motDePasse = this.loginMotDePasse.value.trim();
 
-        if (email && motDePasse) {
-            try {
-                let response = await fetch('user.php?action=login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        email: email,
-                        secret: motDePasse
-                    })
-                });
+        if (!email || !motDePasse) {
+            alert('Veuillez remplir tous les champs.');
+            return;
+        }
 
-                let data = await response.json();
-                if (data.status === 'connecter') {
-                    this.hidePopup(this.loginPopup);
-                    CasinoInterface.setCookie('tokens', data.tokens, 1);
-                    alert('Connexion réussie !');
-                    this.loadBalance();
-                    this.checkUserSession();
+        try {
+            let response = await fetch('user.php?action=login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, motDePasse })
+            });
 
-                    //Vider les champ
-                    this.loginEmail.value = '';
-                    this.loginMotDePasse.value = '';
-                } else {
-                    alert('Email ou mot de passe incorrect');
-                }
-            } catch (error) {
-                console.error('Erreur lors de la connexion', error);
+            let data = await response.json();
+            if (data.status === 'success') {
+                this.user = data.user;
+                this.balance = data.balance || 0;
+                this.updateBalance();
+                this.hidePopup(this.loginPopup);
+                alert('Connexion réussie.');
+            } else {
+                alert('Erreur lors de la connexion. Veuillez réessayer.');
             }
-        } else {
-            alert('Veuillez remplir tous les champs');
+        } catch (error) {
+            console.error('Erreur lors de la connexion', error);
         }
     }
 
-    //Allow to logout an user 
-    //The proccess is by deleting cookies to logout
-    async logout() {
-        // const token = CasinoInterface.getCookie('tokens');
-        CasinoInterface.eraseCookie('tokens');
-        this.checkUserSession();
-    }
-
-    //Cookies
-    static setCookie(name, value, days) {
-        let expire = "";
-        if (days) {
-            let date = new Date();
-            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-            expire = ": expires=" + date.toUTCString();
-        }
-        document.cookie = name + "=" + (value || "") + expire + ": path=/";
-    }
-
-    static getCookie(name) {
-        let nameEQ = name + "=";
-        let ca = document.cookie.split(':');
-        for (let i = 0; i < ca.length; i++) {
-            let c = ca[i];
-            while (c.charAt(0) == ' ') c = c.substring(1, c.length);
-            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
-        }
-        return null;
-    }
-
-    //Suprimer cookies
-    static eraseCookie(name) {
-        document.cookie = name + '=, Max-Age=-99999999; path=/';
-    }
     async depositMoney() {
-        const amount = parseInt(this.depositAmount.value);
-        //Recupération de l'utilisateur connecter pour permettre le déposite
-        if (!isNaN(amount) && amount > 0) {
-            try {
-                let response = await fetch('user.php?action=deposite', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ amount })
-                });
+        const amount = this.depositAmount.value.trim();
+        if (!amount || isNaN(amount) || amount <= 0) {
+            alert('Veuillez entrer un montant valide.');
+            return;
+        }
 
-                let data = await response.json();
-                if (data.status === 'success') {
-                    this.balance += amount;
-                    this.updateBalance();
-                    this.hidePopup(this.depositPopup);
-                    alert('Dépôt réussi !');
-                } else {
-                    alert('Erreur lors du dépôt');
-                }
-            } catch (error) {
-                console.error('Erreur lors du dépôt', error);
+        try {
+            let response = await fetch('user.php?action=deposit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username: this.user.nom, amount: parseInt(amount) })
+            });
+
+            let data = await response.json();
+            if (data.status === 'success') {
+                this.balance += parseInt(amount);
+                this.updateBalance();
+                this.hidePopup(this.depositPopup);
+                alert('Dépôt réussi.');
+            } else {
+                alert('Erreur lors du dépôt. Veuillez réessayer.');
             }
-        } else {
-            alert('Veuillez entrer un montant valide');
+        } catch (error) {
+            console.error('Erreur lors du dépôt', error);
         }
     }
 
     async withdrawMoney() {
-        const amount = parseInt(this.withdrawAmount.value);
-        if (!isNaN(amount) && amount > 0 && amount <= this.balance) {
-            try {
-                let response = await fetch('user.php?action=withdraw', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        nom: "Nari",
-                        amount: amount
-                    })
-                });
+        const amount = this.withdrawAmount.value.trim();
+        if (!amount || isNaN(amount) || amount <= 0 || amount > this.balance) {
+            alert('Veuillez entrer un montant valide.');
+            return;
+        }
 
-                let data = await response.json();
-                if (data.status === 'success') {
-                    this.balance -= amount;
-                    this.updateBalance();
-                    this.hidePopup(this.withdrawPopup);
-                    alert('Retrait réussi !');
-                } else {
-                    alert('Erreur lors du retrait');
-                }
-            } catch (error) {
-                console.error('Erreur lors du retrait', error);
+        try {
+            let response = await fetch('user.php?action=withdraw', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username: this.user.nom, amount: parseInt(amount) })
+            });
+
+            let data = await response.json();
+            if (data.status === 'success') {
+                this.balance -= parseInt(amount);
+                this.updateBalance();
+                this.hidePopup(this.withdrawPopup);
+                alert('Retrait réussi.');
+            } else {
+                alert('Erreur lors du retrait. Veuillez réessayer.');
             }
-        } else {
-            alert('Veuillez entrer un montant valide');
+        } catch (error) {
+            console.error('Erreur lors du retrait', error);
         }
     }
 
-    updateBalance() {
-        this.moneyElement.textContent = `${this.balance}`;
+    async logout() {
+        try {
+            let response = await fetch('user.php?action=logout');
+            if (response.ok) {
+                this.user = [];
+                this.balance = 0;
+                this.updateBalance();
+                alert('Déconnexion réussie.');
+            } else {
+                throw new Error('Erreur lors de la déconnexion');
+            }
+        } catch (error) {
+            console.error('Erreur lors de la déconnexion', error);
+        }
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    new CasinoInterface();
+    const casinoInterface = new CasinoInterface();
 });
+//Amenagemnt du code
